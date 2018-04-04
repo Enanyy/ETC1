@@ -58,10 +58,6 @@ public class FormatTextureToETC1
     [MenuItem("ETC1/Reimport AlphaTexture")]
     static void ReimportAlphaTexture()
     {
-#if !UNITY_ANDROID
-    Debug.Log("当前不是Android环境！");
-    return;
-#endif
 
         List<string> paths = new List<string>();
         for (int i = 0; i < PATHS.Length; ++i)
@@ -71,7 +67,7 @@ public class FormatTextureToETC1
 
         foreach (string path in paths)
         {
-            if (!string.IsNullOrEmpty(path) && IsTextureFile(path) && IsTextureConverted(path))   //full name  
+            if (!string.IsNullOrEmpty(path) && IsRGBTexture(path) && IsTextureConverted(path))   //full name  
             {
                 if(IsAlphaTexture(path))
                 {
@@ -120,48 +116,47 @@ public class FormatTextureToETC1
             return;
         }
         bool bGenerateMipMap = ti.mipmapEnabled;    //same with the texture import setting      
+        TextureFormat format = sourcetex.format;
 
-        Texture2D rgbTex = new Texture2D(sourcetex.width, sourcetex.height, TextureFormat.RGB24, bGenerateMipMap);
-        rgbTex.SetPixels(sourcetex.GetPixels());
+        Texture2D rgbTex = new Texture2D(sourcetex.width, sourcetex.height, format, bGenerateMipMap);
+        Texture2D alphaTex = new Texture2D(sourcetex.width, sourcetex.width, format, false);
 
-        Color[] colors2rdLevel = sourcetex.GetPixels(1);   //Second level of Mipmap
-        Color[] colorsAlpha = new Color[colors2rdLevel.Length];
 
-        bool bAlphaExist = false;
-        for (int i = 0; i < colors2rdLevel.Length; ++i)
+        Color[] colorLevel = sourcetex.GetPixels(0);  
+        Color[] colorRGB = new Color[colorLevel.Length];
+        Color[] colorAlpha = new Color[colorLevel.Length];
+
+
+        for (int i = 0; i < colorLevel.Length; ++i)
         {
-            colorsAlpha[i].r = colors2rdLevel[i].a;
-            colorsAlpha[i].g = colors2rdLevel[i].a;
-            colorsAlpha[i].b = colors2rdLevel[i].a;
+            colorRGB[i].r = colorLevel[i].r;
+            colorRGB[i].g = colorLevel[i].g;
+            colorRGB[i].b = colorLevel[i].b;
+            colorRGB[i].a = colorLevel[i].a;
 
-            if (!Mathf.Approximately(colors2rdLevel[i].a, 1.0f))
-            {
-                bAlphaExist = true;
-            }
+            colorAlpha[i].r = colorLevel[i].a;
+            colorAlpha[i].g = colorLevel[i].a;
+            colorAlpha[i].b = colorLevel[i].a;
+            colorAlpha[i].a = 0;
         }
-        Texture2D alphaTex = null;
-        if (bAlphaExist)
-        {
-            alphaTex = new Texture2D((sourcetex.width + 1) / 2, (sourcetex.height + 1) / 2, TextureFormat.RGB24, bGenerateMipMap);
-        }
-        else
-        {
-            alphaTex = new Texture2D(defaultWhiteTex.width, defaultWhiteTex.height, TextureFormat.RGB24, false);
-        }
-
-        alphaTex.SetPixels(colorsAlpha);
+      
+        rgbTex.SetPixels(colorRGB);
+        alphaTex.SetPixels(colorAlpha);
 
         rgbTex.Apply();
         alphaTex.Apply();
 
         byte[] rgbbytes = rgbTex.EncodeToPNG();
-        File.WriteAllBytes(assetRelativePath, rgbbytes);
+        string rgbTexRelativePath = GetRGBTexPath(texPath);
+        File.WriteAllBytes(rgbTexRelativePath, rgbbytes);
 
         byte[] alphabytes = alphaTex.EncodeToPNG();
         string alphaTexRelativePath = GetAlphaTexPath(texPath);
         File.WriteAllBytes(alphaTexRelativePath, alphabytes);
 
-        ReImportAsset(assetRelativePath, rgbTex.width, rgbTex.height);
+        AssetDatabase.Refresh();
+
+        ReImportAsset(rgbTexRelativePath, rgbTex.width, rgbTex.height);
         ReImportAsset(alphaTexRelativePath, alphaTex.width, alphaTex.height);
         Debug.Log("Succeed Departing : " + assetRelativePath);
     }
@@ -305,6 +300,10 @@ public class FormatTextureToETC1
     static bool IsAlphaTexture(string path)
     {
         return (!string.IsNullOrEmpty(path) && path.Contains("_Alpha."));
+    }
+    static bool IsRGBTexture(string path)
+    {
+        return (!string.IsNullOrEmpty(path) && path.Contains("_RGB."));
     }
 
     static bool IsTextureConverted(string path)
